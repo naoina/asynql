@@ -387,9 +387,21 @@ func TestTX_Stmt(t *testing.T) {
 		t.Fatal(err)
 	}
 	stmt = tx.Stmt(stmt)
+	var wg1, wg2 sync.WaitGroup
+	wg1.Add(2)
+	wg2.Add(2)
 	go func() {
+		defer wg1.Done()
 		name := "alice"
-		rows := <-stmt.Query(name)
+		ch := stmt.Query(name)
+		wg2.Done()
+		rows := <-ch
+		var actual interface{} = rows.Err()
+		var expected interface{} = nil
+		if !reflect.DeepEqual(actual, expected) {
+			t.Fatalf(`stmt.Query(%#v); rows.Err() => %#v; want %#v`, name, actual, expected)
+		}
+		defer rows.Close()
 		for rows.Next() {
 			var id int
 			if err := rows.Scan(&id); err != nil {
@@ -401,15 +413,24 @@ func TestTX_Stmt(t *testing.T) {
 				t.Errorf(`stmt.Query(%#v) => %#v; want %#v`, name, actual, expected)
 			}
 		}
-		actual := rows.Err()
-		expected := error(nil)
+		actual = rows.Err()
+		expected = error(nil)
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf(`stmt.Query(%#v); rows.Err() => %#v; want %#v`, name, actual, expected)
 		}
 	}()
 	go func() {
+		defer wg1.Done()
 		name := "alice"
-		rows := <-stmt.Query(name)
+		ch := stmt.Query(name)
+		wg2.Done()
+		rows := <-ch
+		var actual interface{} = rows.Err()
+		var expected interface{} = nil
+		if !reflect.DeepEqual(actual, expected) {
+			t.Fatalf(`stmt.Query(%#v); rows.Err() => %#v; want %#v`, name, actual, expected)
+		}
+		defer rows.Close()
 		for rows.Next() {
 			var id int
 			if err := rows.Scan(&id); err != nil {
@@ -421,15 +442,17 @@ func TestTX_Stmt(t *testing.T) {
 				t.Errorf(`stmt.Query(%#v) => %#v; want %#v`, name, actual, expected)
 			}
 		}
-		actual := rows.Err()
-		expected := error(nil)
+		actual = rows.Err()
+		expected = error(nil)
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf(`stmt.Query(%#v); rows.Err() => %#v; want %#v`, name, actual, expected)
 		}
 	}()
+	wg2.Wait()
 	var actual interface{} = tx.Commit()
 	var expected interface{} = nil
 	if !reflect.DeepEqual(actual, expected) {
 		t.Errorf(`tx.Commit() => %#v; want %#v`, actual, expected)
 	}
+	wg1.Wait()
 }
